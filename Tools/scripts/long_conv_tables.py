@@ -64,6 +64,8 @@ def main():
 {conv_tables(15)}
 #elif PYLONG_BITS_IN_DIGIT == 30
 {conv_tables(30)}
+#elif PYLONG_BITS_IN_DIGIT == 60
+{conv_tables(60)}
 #else
     #error "invalid PYLONG_BITS_IN_DIGIT value"
 #endif
