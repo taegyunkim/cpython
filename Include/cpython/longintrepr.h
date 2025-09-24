@@ -55,8 +55,21 @@ typedef long stwodigits; /* signed variant of twodigits */
 #define PyLong_SHIFT    15
 #define _PyLong_DECIMAL_SHIFT   4 /* max(e such that 10**e fits in a digit) */
 #define _PyLong_DECIMAL_BASE    ((digit)10000) /* 10 ** DECIMAL_SHIFT */
+#elif PYLONG_BITS_IN_DIGIT == 60
+/* 60-bit digits require 128-bit twodigits type for proper arithmetic */
+/* This implementation requires compiler support for 128-bit integers */
+#if !defined(__SIZEOF_INT128__) || __SIZEOF_INT128__ != 16
+#error "60-bit digits require 128-bit integer support (__int128)"
+#endif
+typedef uint64_t digit;
+typedef int64_t sdigit; /* signed variant of digit */
+typedef unsigned __int128 twodigits;
+typedef __int128 stwodigits; /* signed variant of twodigits */
+#define PyLong_SHIFT    60
+#define _PyLong_DECIMAL_SHIFT   18 /* max(e such that 10**e fits in a digit) */
+#define _PyLong_DECIMAL_BASE    ((digit)1000000000000000000) /* 10 ** DECIMAL_SHIFT */
 #else
-#error "PYLONG_BITS_IN_DIGIT should be 15 or 30"
+#error "PYLONG_BITS_IN_DIGIT should be 15, 30, or 60"
 #endif
 #define PyLong_BASE     ((digit)1 << PyLong_SHIFT)
 #define PyLong_MASK     ((digit)(PyLong_BASE - 1))
