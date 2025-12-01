@@ -5955,7 +5955,17 @@ simple:
     x = PyLong_AsLongLong((PyObject *)a);
     y = PyLong_AsLongLong((PyObject *)b);
 #else
-# error "_PyLong_GCD"
+    /* For very large digits (like 60-bit), fall back to general algorithm */
+    /* Use the binary GCD algorithm directly on PyLong objects */
+    while (!_PyLong_IsZero(b)) {
+        PyLongObject *temp = long_rem(a, b);
+        if (temp == NULL) goto error;
+        Py_DECREF(a);
+        a = b;
+        b = temp;
+    }
+    Py_DECREF(b);
+    return (PyObject *)a;
 #endif
     x = Py_ABS(x);
     y = Py_ABS(y);
@@ -5973,7 +5983,8 @@ simple:
 #elif LLONG_MAX >> PyLong_SHIFT >> PyLong_SHIFT
     return PyLong_FromLongLong(x);
 #else
-# error "_PyLong_GCD"
+    /* This should not be reached for 60-bit case as handled above */
+    Py_UNREACHABLE();
 #endif
 
 error:

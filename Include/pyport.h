@@ -130,8 +130,9 @@ Used in:  Py_SAFE_DOWNCAST
 #define PY_INT64_T int64_t
 
 /* PYLONG_BITS_IN_DIGIT describes the number of bits per "digit" (limb) in the
- * PyLongObject implementation (longintrepr.h). It's currently either 30 or 15,
+ * PyLongObject implementation (longintrepr.h). It's currently 15, 30, or 60,
  * defaulting to 30. The 15-bit digit option may be removed in the future.
+ * The 60-bit digit option requires 128-bit integer support.
  */
 #ifndef PYLONG_BITS_IN_DIGIT
 #define PYLONG_BITS_IN_DIGIT 30

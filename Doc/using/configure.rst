@@ -127,13 +127,15 @@ General Options
    Disable IPv6 support (enabled by default if supported), see the
    :mod:`socket` module.
 
-.. option:: --enable-big-digits=[15|30]
+.. option:: --enable-big-digits=[15|30|60]
 
-   Define the size in bits of Python :class:`int` digits: 15 or 30 bits.
+   Define the size in bits of Python :class:`int` digits: 15, 30, or 60 bits.
 
    By default, the digit size is 30.
 
-   Define the ``PYLONG_BITS_IN_DIGIT`` to ``15`` or ``30``.
+   Define the ``PYLONG_BITS_IN_DIGIT`` to ``15``, ``30``, or ``60``.
+
+   The 60-bit option requires 128-bit integer support and is only available on supported platforms.
 
    See :data:`sys.int_info.bits_per_digit <sys.int_info>`.
 
