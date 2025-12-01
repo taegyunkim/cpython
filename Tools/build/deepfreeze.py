@@ -372,12 +372,12 @@ class Printer:
             self._generate_int_for_bits(name, i, 2**15)
         else:
             connective = "if"
-            for bits_in_digit in 15, 30:
+            for bits_in_digit in 15, 30, 60:
                 self.write(f"#{connective} PYLONG_BITS_IN_DIGIT == {bits_in_digit}")
                 self._generate_int_for_bits(name, i, 2**bits_in_digit)
                 connective = "elif"
             self.write("#else")
-            self.write('#error "PYLONG_BITS_IN_DIGIT should be 15 or 30"')
+            self.write('#error "PYLONG_BITS_IN_DIGIT should be 15, 30, or 60"')
             self.write("#endif")
             # If neither clause applies, it won't compile
         return f"& {name}.ob_base"
