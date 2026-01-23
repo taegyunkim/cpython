@@ -784,7 +784,9 @@ class PyLongModuleTests(unittest.TestCase):
         # Regression test for https://github.com/python/cpython/issues/142554.
         bad_int_divmod = lambda a, b: (1,)
         # 'k' chosen such that divmod(2**(2*k), 2**k) uses _pylong.int_divmod()
-        k = 10_000
+        # Scale k based on digit size: larger digits need larger k to reach the threshold
+        bits_per_digit = sys.int_info.bits_per_digit
+        k = 10_000 * (bits_per_digit // 30)
         a, b = (1 << (2 * k)), (1 << k)
         with mock.patch.object(_pylong, "int_divmod", wraps=bad_int_divmod):
             msg = r"tuple of length 2 is required from int_divmod\(\)"

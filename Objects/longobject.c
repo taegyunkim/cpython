@@ -5899,6 +5899,22 @@ simple:
     y = PyLong_AsLongLong((PyObject *)b);
 #else
     /* For very large digits (like 60-bit), fall back to general algorithm */
+    /* First take absolute values, since GCD must be non-negative */
+    PyLongObject *a_abs = long_abs(a);
+    Py_DECREF(a);
+    if (a_abs == NULL) {
+        Py_DECREF(b);
+        return NULL;
+    }
+    PyLongObject *b_abs = long_abs(b);
+    Py_DECREF(b);
+    if (b_abs == NULL) {
+        Py_DECREF(a_abs);
+        return NULL;
+    }
+    a = a_abs;
+    b = b_abs;
+
     /* Use the Euclidean GCD algorithm directly on PyLong objects */
     while (!_PyLong_IsZero(b)) {
         PyLongObject *temp;
