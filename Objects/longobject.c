@@ -367,9 +367,18 @@ _PyLong_Negate(PyLongObject **x_p)
         if (IS_SMALL_INT(ival)) {                                                   \
             return get_small_int((sdigit)(ival));                                   \
         }                                                                           \
+        /* If the type size <= PyLong_SHIFT, all values fit in one digit. */       \
+        /* This check must come before the PyLong_MASK comparison to avoid */      \
+        /* overflow when casting PyLong_MASK to a narrower type. */                \
+        if (sizeof(UINT_TYPE) * 8 <= PyLong_SHIFT) {                                \
+            /* All values of this type fit in medium case */                       \
+            return _PyLong_FromMedium((sdigit)(ival));                              \
+        }                                                                           \
+        /* For larger types, check if the value fits in one digit */               \
         if (-(INT_TYPE)PyLong_MASK <= (ival) && (ival) <= (INT_TYPE)PyLong_MASK) {  \
             return _PyLong_FromMedium((sdigit)(ival));                              \
         }                                                                           \
+        /* Multi-digit case */                                                      \
         UINT_TYPE abs_ival = (ival) < 0 ? 0U-(UINT_TYPE)(ival) : (UINT_TYPE)(ival); \
         /* Do shift in two steps to avoid possible undefined behavior. */           \
         UINT_TYPE t = abs_ival >> PyLong_SHIFT >> PyLong_SHIFT;                     \
@@ -409,9 +418,16 @@ PyLong_FromLong(long ival)
         if (IS_SMALL_UINT(ival)) { \
             return get_small_int((sdigit)(ival)); \
         } \
+        /* If the type size <= PyLong_SHIFT, all values fit in one digit. */ \
+        if (sizeof(INT_TYPE) * 8 <= PyLong_SHIFT) { \
+            /* All values of this type fit in medium case */ \
+            return _PyLong_FromMedium((sdigit)(ival)); \
+        } \
+        /* For larger types, check if the value fits in one digit */ \
         if ((ival) <= PyLong_MASK) { \
             return _PyLong_FromMedium((sdigit)(ival)); \
         } \
+        /* Multi-digit case */ \
         /* Do shift in two steps to avoid possible undefined behavior. */ \
         INT_TYPE t = (ival) >> PyLong_SHIFT >> PyLong_SHIFT; \
         /* Count digits (at least two - smaller cases were handled above). */ \
@@ -3756,9 +3772,30 @@ long_hash(PyObject *obj)
            not all _PyHASH_BITS bits of x are 1s, the same is true
            after rotation, so 0 <= y+z < _PyHASH_MODULUS and y + z is
            the reduction of x*2**PyLong_SHIFT modulo
-           _PyHASH_MODULUS. */
+           _PyHASH_MODULUS.
+
+           When PyLong_SHIFT is very close to _PyHASH_BITS (e.g., 60 vs 61),
+           the rotation formula above doesn't work reliably. In this case,
+           we use proper modular arithmetic with 128-bit integers. */
+#if _PyHASH_BITS >= 2 * PyLong_SHIFT
         x = ((x << PyLong_SHIFT) & _PyHASH_MODULUS) |
             (x >> (_PyHASH_BITS - PyLong_SHIFT));
+#else
+        /* For large PyLong_SHIFT, use 128-bit arithmetic if available */
+#if defined(__SIZEOF_INT128__)
+        unsigned __int128 temp = ((unsigned __int128)x << PyLong_SHIFT) % _PyHASH_MODULUS;
+        x = (Py_uhash_t)temp;
+#else
+        /* Fallback: slow but correct modular multiplication */
+        Py_uhash_t hi = x >> (_PyHASH_BITS - PyLong_SHIFT);
+        Py_uhash_t lo = (x << PyLong_SHIFT) & _PyHASH_MODULUS;
+        /* x * 2^PyLong_SHIFT = hi * 2^_PyHASH_BITS + lo */
+        /* = hi * (2^_PyHASH_BITS mod _PyHASH_MODULUS) + lo mod _PyHASH_MODULUS */
+        /* Since 2^_PyHASH_BITS = _PyHASH_MODULUS + 1, we have: */
+        /* 2^_PyHASH_BITS mod _PyHASH_MODULUS = 1 */
+        x = (lo + hi) % _PyHASH_MODULUS;
+#endif
+#endif
         x += v->long_value.ob_digit[i];
         if (x >= _PyHASH_MODULUS)
             x -= _PyHASH_MODULUS;
@@ -5956,10 +5993,10 @@ simple:
     y = PyLong_AsLongLong((PyObject *)b);
 #else
     /* For very large digits (like 60-bit), fall back to general algorithm */
-    /* Use the binary GCD algorithm directly on PyLong objects */
+    /* Use the Euclidean GCD algorithm directly on PyLong objects */
     while (!_PyLong_IsZero(b)) {
-        PyLongObject *temp = long_rem(a, b);
-        if (temp == NULL) goto error;
+        PyLongObject *temp;
+        if (long_rem(a, b, &temp) < 0) goto error;
         Py_DECREF(a);
         a = b;
         b = temp;
@@ -6353,8 +6390,21 @@ popcount_digit(digit d)
 {
     // digit can be larger than uint32_t, but only PyLong_SHIFT bits
     // of it will be ever used.
-    static_assert(PyLong_SHIFT <= 32, "digit is larger than uint32_t");
+#if PyLong_SHIFT <= 32
     return _Py_popcount32((uint32_t)d);
+#else
+    // For 60-bit digits, use 64-bit popcount
+#if defined(__clang__) || defined(__GNUC__)
+    return __builtin_popcountll((uint64_t)d);
+#else
+    // Fallback SWAR implementation for 64-bit
+    uint64_t x = (uint64_t)d;
+    x = x - ((x >> 1) & UINT64_C(0x5555555555555555));
+    x = (x & UINT64_C(0x3333333333333333)) + ((x >> 2) & UINT64_C(0x3333333333333333));
+    x = (x + (x >> 4)) & UINT64_C(0x0F0F0F0F0F0F0F0F);
+    return (int)((x * UINT64_C(0x0101010101010101)) >> 56);
+#endif
+#endif
 }
 
 /*[clinic input]
