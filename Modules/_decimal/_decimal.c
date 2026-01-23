@@ -2362,24 +2362,68 @@ dec_from_long(decimal_state *state, PyTypeObject *type, PyObject *v,
     if (export_long.digits) {
         const PyLongLayout *layout = PyLong_GetNativeLayout();
 
-        assert(layout->bits_per_digit < 32);
         assert(layout->digits_order == -1);
         assert(layout->digit_endianness == (PY_LITTLE_ENDIAN ? -1 : 1));
-        assert(layout->digit_size == 2 || layout->digit_size == 4);
 
-        uint32_t base = (uint32_t)1 << layout->bits_per_digit;
         uint8_t sign = export_long.negative ? MPD_NEG : MPD_POS;
         Py_ssize_t len = export_long.ndigits;
 
-        if (layout->digit_size == 4) {
-            mpd_qimport_u32(MPD(dec), export_long.digits, len, sign,
-                            base, ctx, status);
+        // For 60-bit digits, split each digit into two 30-bit chunks
+        // This allows us to use the existing mpd_qimport_u32 with base 2^30
+        if (layout->bits_per_digit == 60 && layout->digit_size == 8) {
+            // Each 60-bit digit becomes two 30-bit values
+            Py_ssize_t new_len = len * 2;
+            uint32_t *temp_data = (uint32_t *)PyMem_Malloc(new_len * sizeof(uint32_t));
+            if (temp_data == NULL) {
+                PyLong_FreeExport(&export_long);
+                Py_DECREF(dec);
+                PyErr_NoMemory();
+                return NULL;
+            }
+
+            const uint64_t *digits64 = (const uint64_t *)export_long.digits;
+            const uint64_t MASK_30 = (UINT64_C(1) << 30) - 1;
+
+            // Split each 60-bit digit into low 30 bits and high 30 bits
+            for (Py_ssize_t i = 0; i < len; i++) {
+                uint64_t digit = digits64[i];
+                temp_data[i * 2] = (uint32_t)(digit & MASK_30);           // Low 30 bits
+                temp_data[i * 2 + 1] = (uint32_t)((digit >> 30) & MASK_30); // High 30 bits
+            }
+
+            // Import using base 2^30
+            // This represents: temp[0]*(2^30)^0 + temp[1]*(2^30)^1 + temp[2]*(2^30)^2 + ...
+            // Which correctly reconstructs the original value
+            mpd_qimport_u32(MPD(dec), temp_data, new_len, sign,
+                            UINT32_C(1) << 30, ctx, status);
+
+            PyMem_Free(temp_data);
+            PyLong_FreeExport(&export_long);
+        }
+        else if (layout->bits_per_digit < 32) {
+            // Standard case for 15-bit and 30-bit digits
+            assert(layout->digit_size == 2 || layout->digit_size == 4);
+
+            uint32_t base = (uint32_t)1 << layout->bits_per_digit;
+
+            if (layout->digit_size == 4) {
+                mpd_qimport_u32(MPD(dec), export_long.digits, len, sign,
+                                base, ctx, status);
+            }
+            else {
+                mpd_qimport_u16(MPD(dec), export_long.digits, len, sign,
+                                base, ctx, status);
+            }
+            PyLong_FreeExport(&export_long);
         }
         else {
-            mpd_qimport_u16(MPD(dec), export_long.digits, len, sign,
-                            base, ctx, status);
+            // Unsupported digit size - shouldn't happen
+            PyLong_FreeExport(&export_long);
+            Py_DECREF(dec);
+            PyErr_SetString(PyExc_SystemError,
+                            "Unsupported PyLong digit size for Decimal conversion");
+            return NULL;
         }
-        PyLong_FreeExport(&export_long);
     }
     else {
         mpd_qset_i64(MPD(dec), export_long.value, ctx, status);
@@ -3709,9 +3753,59 @@ dec_as_long(PyObject *dec, PyObject *context, int round)
 
     const PyLongLayout *layout = PyLong_GetNativeLayout();
 
-    assert(layout->bits_per_digit < 32);
     assert(layout->digits_order == -1);
     assert(layout->digit_endianness == (PY_LITTLE_ENDIAN ? -1 : 1));
+
+    // For 60-bit digits, export using base 2^30 and combine pairs of 30-bit chunks
+    if (layout->bits_per_digit == 60 && layout->digit_size == 8) {
+        // Export using base 2^30 to get 30-bit chunks
+        uint32_t *tmp_digits_30 = NULL;
+        status = 0;
+        size_t n_30 = mpd_qexport_u32(&tmp_digits_30, 0, UINT32_C(1) << 30, x, &status);
+
+        if (n_30 == SIZE_MAX) {
+            PyErr_NoMemory();
+            mpd_del(x);
+            return NULL;
+        }
+
+        // Each pair of 30-bit chunks becomes one 60-bit digit
+        // n_30 chunks in base 2^30 -> (n_30 + 1) / 2 digits in base 2^60
+        size_t n_60 = (n_30 + 1) / 2;
+
+        uint64_t *digits_60 = (uint64_t *)PyMem_Malloc(n_60 * sizeof(uint64_t));
+        if (digits_60 == NULL) {
+            mpd_free(tmp_digits_30);
+            mpd_del(x);
+            PyErr_NoMemory();
+            return NULL;
+        }
+
+        // Combine pairs of 30-bit chunks into 60-bit digits
+        for (size_t i = 0; i < n_60; i++) {
+            uint64_t low = tmp_digits_30[i * 2];
+            uint64_t high = (i * 2 + 1 < n_30) ? tmp_digits_30[i * 2 + 1] : 0;
+            digits_60[i] = low | (high << 30);
+        }
+
+        mpd_free(tmp_digits_30);
+
+        void *pylong_digits;
+        PyLongWriter *writer = PyLongWriter_Create(mpd_isnegative(x), n_60, &pylong_digits);
+        mpd_del(x);
+
+        if (writer == NULL) {
+            PyMem_Free(digits_60);
+            return NULL;
+        }
+
+        memcpy(pylong_digits, digits_60, n_60 * sizeof(uint64_t));
+        PyMem_Free(digits_60);
+
+        return PyLongWriter_Finish(writer);
+    }
+
+    assert(layout->bits_per_digit < 32);
     assert(layout->digit_size == 2 || layout->digit_size == 4);
 
     uint32_t base = (uint32_t)1 << layout->bits_per_digit;
