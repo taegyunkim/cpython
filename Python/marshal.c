@@ -290,6 +290,7 @@ _r_digits##bitsize(const uint ## bitsize ## _t *digits, Py_ssize_t n,     \
 }
 _r_digits(16)
 _r_digits(32)
+_r_digits(64)
 #undef _r_digits
 
 static void
@@ -337,12 +338,16 @@ w_PyLong(const PyLongObject *ob, char flag, WFILE *p)
     assert(layout->bits_per_digit >= PyLong_MARSHAL_SHIFT);
 
     /* other assumptions on PyLongObject internals */
-    assert(layout->bits_per_digit <= 32);
+    assert(layout->bits_per_digit <= 64);
     assert(layout->digits_order == -1);
     assert(layout->digit_endianness == (PY_LITTLE_ENDIAN ? -1 : 1));
-    assert(layout->digit_size == 2 || layout->digit_size == 4);
+    assert(layout->digit_size == 2 || layout->digit_size == 4 || layout->digit_size == 8);
 
-    if (layout->digit_size == 4) {
+    if (layout->digit_size == 8) {
+        _r_digits64(long_export.digits, long_export.ndigits,
+                    long_export.negative, marshal_ratio, p);
+    }
+    else if (layout->digit_size == 4) {
         _r_digits32(long_export.digits, long_export.ndigits,
                     long_export.negative, marshal_ratio, p);
     }
@@ -987,6 +992,7 @@ bad_digit:                                                              \
 }
 _w_digits(32)
 _w_digits(16)
+_w_digits(64)
 #undef _w_digits
 
 static PyObject *
@@ -1010,10 +1016,10 @@ r_PyLong(RFILE *p)
     assert(layout->bits_per_digit >= PyLong_MARSHAL_SHIFT);
 
     /* other assumptions on PyLongObject internals */
-    assert(layout->bits_per_digit <= 32);
+    assert(layout->bits_per_digit <= 64);
     assert(layout->digits_order == -1);
     assert(layout->digit_endianness == (PY_LITTLE_ENDIAN ? -1 : 1));
-    assert(layout->digit_size == 2 || layout->digit_size == 4);
+    assert(layout->digit_size == 2 || layout->digit_size == 4 || layout->digit_size == 8);
 
     Py_ssize_t size = 1 + (Py_ABS(n) - 1) / marshal_ratio;
 
@@ -1029,7 +1035,10 @@ r_PyLong(RFILE *p)
 
     int ret;
 
-    if (layout->digit_size == 4) {
+    if (layout->digit_size == 8) {
+        ret = _w_digits64(digits, size, marshal_ratio, shorts_in_top_digit, p);
+    }
+    else if (layout->digit_size == 4) {
         ret = _w_digits32(digits, size, marshal_ratio, shorts_in_top_digit, p);
     }
     else {
