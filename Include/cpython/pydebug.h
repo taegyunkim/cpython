@@ -31,6 +31,13 @@ Py_DEPRECATED(3.12) PyAPI_DATA(int) Py_LegacyWindowsStdioFlag;
    PYTHONPATH and PYTHONHOME from the environment */
 PyAPI_FUNC(char*) Py_GETENV(const char *name);
 
+/* Return process-global, read-only debugging metadata registered as name.
+   Store its size in *size. Return NULL and store zero if name is unavailable.
+   The returned pointer remains valid for the lifetime of the process. */
+PyAPI_FUNC(const void *) PyUnstable_Debug_GetMetadata(
+    const char *name,
+    size_t *size);
+
 #ifdef __cplusplus
 }
 #endif

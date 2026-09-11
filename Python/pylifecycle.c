@@ -124,6 +124,82 @@ GENERATE_DEBUG_SECTION(PyRuntime, _PyRuntimeState _PyRuntime)
 _Py_COMP_DIAG_POP
 
 
+#define MAX_DEBUG_METADATA_ENTRIES 16
+
+typedef struct {
+    const char *name;
+    const void *data;
+    size_t size;
+} _PyDebugMetadataEntry;
+
+static struct {
+    PyMutex mutex;
+    Py_ssize_t count;
+    _PyDebugMetadataEntry entries[MAX_DEBUG_METADATA_ENTRIES];
+} debug_metadata_registry = {
+    .count = 1,
+    .entries = {
+        {"PyRuntime", &_PyRuntime, sizeof(_PyRuntime)},
+    },
+};
+
+int
+_PyDebugMetadata_Register(const char *name, const void *data, size_t size)
+{
+    if (name == NULL || data == NULL || size == 0) {
+        return -1;
+    }
+
+    PyMutex_Lock(&debug_metadata_registry.mutex);
+    Py_ssize_t count =
+        _Py_atomic_load_ssize_acquire(&debug_metadata_registry.count);
+    for (Py_ssize_t i = 0; i < count; i++) {
+        _PyDebugMetadataEntry *entry = &debug_metadata_registry.entries[i];
+        if (strcmp(name, entry->name) == 0) {
+            int result = entry->data == data && entry->size == size ? 0 : -1;
+            PyMutex_Unlock(&debug_metadata_registry.mutex);
+            return result;
+        }
+    }
+    if (count == MAX_DEBUG_METADATA_ENTRIES) {
+        PyMutex_Unlock(&debug_metadata_registry.mutex);
+        return -1;
+    }
+
+    _PyDebugMetadataEntry *entry = &debug_metadata_registry.entries[count];
+    entry->name = name;
+    entry->data = data;
+    entry->size = size;
+    _Py_atomic_store_ssize_release(&debug_metadata_registry.count, count + 1);
+    PyMutex_Unlock(&debug_metadata_registry.mutex);
+    return 0;
+}
+
+const void *
+PyUnstable_Debug_GetMetadata(const char *name, size_t *size)
+{
+    if (size == NULL) {
+        return NULL;
+    }
+    *size = 0;
+    if (name == NULL) {
+        return NULL;
+    }
+
+    Py_ssize_t count =
+        _Py_atomic_load_ssize_acquire(&debug_metadata_registry.count);
+    for (Py_ssize_t i = 0; i < count; i++) {
+        const _PyDebugMetadataEntry *entry =
+            &debug_metadata_registry.entries[i];
+        if (strcmp(name, entry->name) == 0) {
+            *size = entry->size;
+            return entry->data;
+        }
+    }
+    return NULL;
+}
+
+
 static int runtime_initialized = 0;
 
 PyStatus

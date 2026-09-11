@@ -23,6 +23,13 @@ extern "C" {
    declaration                                      \
    _GENERATE_DEBUG_SECTION_LINUX(name)
 
+// Register process-global, immutable metadata for in-process tools. name and
+// data must remain valid for the lifetime of the process.
+PyAPI_FUNC(int) _PyDebugMetadata_Register(
+    const char *name,
+    const void *data,
+    size_t size);
+
 // Please note that section names are truncated to eight bytes
 // on Windows!
 #if defined(MS_WINDOWS)

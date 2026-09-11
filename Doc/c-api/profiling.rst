@@ -17,6 +17,32 @@ events reported to the trace function are the same as had been reported to the
 Python-level trace functions in previous versions.
 
 
+Debug metadata
+--------------
+
+.. c:function:: const void *PyUnstable_Debug_GetMetadata(const char *name, size_t *size)
+
+   Return process-global, read-only debug metadata registered as *name* and
+   store its size in *size*. Return ``NULL`` and store zero if the metadata is
+   not available. This function does not set an exception.
+
+   The returned pointer remains valid for the lifetime of the process. The
+   caller must copy and validate the metadata before using it. Metadata layouts
+   may change between Python minor versions.
+
+   ``PyRuntime`` is available after the runtime is initialized. It points to
+   the runtime state whose first member is the runtime debug-offset table.
+   ``AsyncioDebug`` becomes available after the :mod:`_asyncio` module is
+   initialized and points directly to its debug-offset table.
+
+   This function can be called without an attached thread state and does not
+   perform memory allocation or filesystem access.
+
+   This is an :ref:`unstable C API <unstable-c-api>` function.
+
+   .. versionadded:: 3.16
+
+
 .. c:type:: int (*Py_tracefunc)(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg)
 
    The type of the trace function registered using :c:func:`PyEval_SetProfile` and
