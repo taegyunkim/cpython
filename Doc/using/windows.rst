@@ -283,8 +283,8 @@ Passing ``--update`` will replace existing installs if the new version is newer.
 Otherwise, they will be left. If no tags are provided with ``--update``, all
 installs managed by the Python install manager will be updated if newer versions
 are available. Updates will remove any modifications made to the install,
-including globally installed packages, but virtual environments will continue to
-work.
+including globally installed packages, but will leave ``site-packages`` and
+``Scripts`` directories as is.  Virtual environments are also unaffected.
 
 Passing ``--dry-run`` will generate output and logs, but will not modify any
 installs.
@@ -382,7 +382,6 @@ again. To completely clean up all Python runtimes, run with ``--purge`` before
 uninstalling the Python install manager.
 
 .. _pymanager-config:
-.. _customization:
 .. _customizing-default-python-versions:
 .. _customization-via-ini-files:
 .. _launcher-ini:
@@ -400,8 +399,9 @@ override all other settings, but not every option is available.
 This section will describe the defaults, but be aware that modified or
 overridden installs may resolve settings differently.
 
-A global configuration file may be configured by an administrator, and would be
-read first. The user configuration file is stored at
+A global configuration file may be configured by an
+:ref:`administrator <pymanager-admin-config>`
+and would be read first. The user configuration file is stored at
 :file:`%AppData%\\Python\\pymanager.json`
 (note that this location is under ``Roaming``, not ``Local``) and is read next,
 overwriting any settings from earlier files. An additional configuration file
@@ -943,7 +943,7 @@ checking for that feed.
    }
 
 
-Proxy Settings
+Proxy settings
 --------------
 
 .. versionadded:: 26.4
@@ -1345,14 +1345,15 @@ UTF-8 mode
    Python UTF-8 mode is now enabled by default (:pep:`686`).
 
 Windows still uses legacy encodings for the system encoding (the ANSI Code
-Page).  Python uses it for the default encoding of text files (e.g.
-:func:`locale.getencoding`).
+Page).  When the :ref:`Python UTF-8 Mode <utf8-mode>` is disabled, Python
+uses the ANSI Code Page as the default encoding of text files, as
+returned by :func:`locale.getencoding`.
 
 This may cause issues because UTF-8 is widely used on the internet
 and most Unix systems, including WSL (Windows Subsystem for Linux).
 
-The :ref:`Python UTF-8 Mode <utf8-mode>`, enabled by default, can help by
-changing the default text encoding to UTF-8.
+The :ref:`Python UTF-8 Mode <utf8-mode>`, enabled by default, ignores the
+system encoding and uses UTF-8 as the default text encoding.
 When the :ref:`UTF-8 mode <utf8-mode>` is enabled, you can still use the
 system encoding (the ANSI Code Page) via the "mbcs" codec.
 
