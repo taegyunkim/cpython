@@ -100,6 +100,9 @@ typedef struct {
      || PyObject_TypeCheck(obj, state->TaskType))
 
 typedef struct _Py_AsyncioModuleDebugOffsets {
+    char cookie[8] _Py_NONSTRING;
+    uint64_t version;
+    uint64_t size;
     struct _asyncio_task_object {
         uint64_t size;
         uint64_t task_name;
@@ -122,7 +125,10 @@ typedef struct _Py_AsyncioModuleDebugOffsets {
 } Py_AsyncioModuleDebugOffsets;
 
 GENERATE_DEBUG_SECTION(AsyncioDebug, Py_AsyncioModuleDebugOffsets _Py_AsyncioDebug)
-    = {.asyncio_task_object = {
+    = {.cookie = _Py_AsyncioDebug_Cookie,
+       .version = PY_VERSION_HEX,
+       .size = sizeof(Py_AsyncioModuleDebugOffsets),
+       .asyncio_task_object = {
            .size = sizeof(TaskObj),
            .task_name = offsetof(TaskObj, task_name),
            .task_awaited_by = offsetof(TaskObj, task_awaited_by),
@@ -4323,6 +4329,10 @@ module_init(asyncio_state *state)
         goto fail;
     }
     state->debug_offsets = &_Py_AsyncioDebug;
+    // Let debuggers find the table from _PyRuntime. Every interpreter stores
+    // the same address, and extension modules are never unloaded.
+    _Py_atomic_store_ptr_release(&_PyRuntime.asyncio_debug_offsets,
+                                 &_Py_AsyncioDebug);
 
     Py_DECREF(module);
     return 0;

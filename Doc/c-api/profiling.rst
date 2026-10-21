@@ -33,7 +33,12 @@ Debug metadata
    ``PyRuntime`` is available after the runtime is initialized. It points to
    the runtime state whose first member is the runtime debug-offset table.
    ``AsyncioDebug`` becomes available after the :mod:`_asyncio` module is
-   initialized and points directly to its debug-offset table.
+   initialized and points directly to its debug-offset table. The table starts
+   with the 8-byte cookie ``xasyncpy``, the :c:data:`Py_Version` of the build,
+   and the table size. Out-of-process tools can find the same table by reading
+   the pointer at ``runtime_state.asyncio_debug_offsets`` in the runtime
+   debug-offset table. The pointer is ``NULL`` until :mod:`_asyncio` is
+   initialized.
 
    This function can be called without an attached thread state and does not
    perform memory allocation or filesystem access.
