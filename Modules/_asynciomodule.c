@@ -3,7 +3,6 @@
 #endif
 
 #include "Python.h"
-#include "pycore_debug_offsets.h"  // _PyDebugMetadata_Register()
 #include "pycore_freelist.h"      // _Py_FREELIST_POP()
 #include "pycore_genobject.h"
 #include "pycore_llist.h"         // struct llist_node
@@ -4321,13 +4320,6 @@ module_init(asyncio_state *state)
         goto fail;
     }
 
-    if (_PyDebugMetadata_Register(
-            "AsyncioDebug", &_Py_AsyncioDebug, sizeof(_Py_AsyncioDebug)) < 0)
-    {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "failed to register asyncio debug metadata");
-        goto fail;
-    }
     state->debug_offsets = &_Py_AsyncioDebug;
     // Let debuggers find the table from _PyRuntime. Every interpreter stores
     // the same address, and extension modules are never unloaded.

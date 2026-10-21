@@ -3733,9 +3733,6 @@ _testcapi_exec(PyObject *m)
     if (_PyTestCapi_Init_Docstring(m) < 0) {
         return -1;
     }
-    if (_PyTestCapi_Init_Debug(m) < 0) {
-        return -1;
-    }
     if (_PyTestCapi_Init_Mem(m) < 0) {
         return -1;
     }
